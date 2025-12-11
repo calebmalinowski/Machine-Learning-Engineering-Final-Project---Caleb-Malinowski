@@ -1,0 +1,249 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import matplotlib.pyplot as plt
+
+# load data
+df = pd.read_csv('master_data.csv')
+
+target_column = 'heat_transfer_coef'
+X = df.drop(columns=[target_column])
+y = df[target_column]
+X = X.select_dtypes(include='number')
+
+# perform log-transform on the target
+y_log = np.log1p(y)  # log(1 + h) avoids log(0)
+
+# standardize the features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# split data 70/30
+X_train, X_test, y_train_log, y_test_log = train_test_split(
+    X_scaled, y_log, test_size=0.3, random_state=42
+)
+
+# train model
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train_log)
+
+# make predictions
+y_pred_log = model.predict(X_test)
+y_pred = np.expm1(y_pred_log)
+y_test = np.expm1(y_test_log)
+
+# compute rmse
+def rmse(y_true, y_pred):
+    return np.sqrt(mean_squared_error(y_true, y_pred))
+
+# log
+mse_log = mean_squared_error(y_test_log, y_pred_log)
+rmse_log = rmse(y_test_log, y_pred_log)
+mae_log = mean_absolute_error(y_test_log, y_pred_log)
+r2_log = r2_score(y_test_log, y_pred_log)
+
+# linear
+mse_lin = mean_squared_error(y_test, y_pred)
+rmse_lin = rmse(y_test, y_pred)
+mae_lin = mean_absolute_error(y_test, y_pred)
+r2_lin = r2_score(y_test, y_pred)
+
+print("\n=== Test Results ===")
+print(f"LOG SCALE:")
+print(f"  MSE:  {mse_log:.6f}")
+print(f"  RMSE: {rmse_log:.6f}")
+print(f"  MAE:  {mae_log:.6f}")
+print(f"  R²:   {r2_log:.6f}")
+
+print(f"\nLINEAR SCALE:")
+print(f"  MSE:  {mse_lin:.6f}")
+print(f"  RMSE: {rmse_lin:.6f}")
+print(f"  MAE:  {mae_lin:.6f}")
+print(f"  R²:   {r2_lin:.6f}")
+
+# KFOLD CROSS VALIDATION
+k = 10
+kf = KFold(n_splits=k, shuffle=True, random_state=42)
+cv_r2_scores = cross_val_score(model, X_scaled, y_log, cv=kf, scoring='r2')
+cv_mse_scores = -cross_val_score(model, X_scaled, y_log, cv=kf, scoring='neg_mean_squared_error')
+
+print("\n=== Cross-Validation Results (Log scale) ===")
+print(f"R² (mean ± std):  {cv_r2_scores.mean():.6f} ± {cv_r2_scores.std():.6f}")
+print(f"MSE (mean ± std): {cv_mse_scores.mean():.6f} ± {cv_mse_scores.std():.6f}")
+
+# plot results
+plt.figure(figsize=(6,6))
+plt.scatter(y_test, y_pred, s=15, alpha=0.7, color='royalblue', edgecolor='black')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+plt.xlabel("True Heat Transfer Coefficient")
+plt.ylabel("Predicted Heat Transfer Coefficient")
+plt.title("Predicted vs True Values")
+#plt.xlim(0, 400)
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# feature importance
+feature_importances = model.feature_importances_
+feature_names = X.columns
+
+# Sort by importance
+sorted_idx = np.argsort(feature_importances)[::-1]
+sorted_importances = feature_importances[sorted_idx]
+sorted_features = feature_names[sorted_idx]
+
+# Plot
+plt.figure(figsize=(8,5))
+plt.barh(sorted_features, sorted_importances, color='seagreen')
+plt.xlabel("Feature Importance")
+plt.title("Feature Importances")
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()
+
+# Print results
+print("\n=== Top Features by Importance ===")
+for i in range(min(10, len(sorted_features))):
+    print(f"{i+1:2d}. {sorted_features[i]:<25}  Importance: {sorted_importances[i]:.4f}")
+
+plt.figure(figsize=(6,6))
+plt.scatter(y_test, y_pred, s=15, alpha=0.7, color='royalblue', edgecolor='black')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+plt.xlabel("True Heat Transfer Coefficient")
+plt.ylabel("Predicted Heat Transfer Coefficient")
+plt.title("Predicted vs True Values")
+plt.xlim(0, 400)
+plt.ylim(0, 400)
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# Use all original rows and columns
+X_numeric = df[X.columns]  # numeric columns used for training
+
+# Scale features
+X_scaled_full = scaler.transform(X_numeric)
+
+# Make predictions
+y_pred_log_full = model.predict(X_scaled_full)
+y_pred_full = np.expm1(y_pred_log_full)
+
+df_predictions = df.copy()
+df_predictions['predicted_h'] = y_pred_full
+
+# Save file
+output_csv = 'master_data_predictions_only.csv'
+df_predictions.to_csv(output_csv, index=False)
+
+print(f"All predictions saved with original columns to '{output_csv}'.")
+
+# Use all original rows and columns
+X_numeric = df[X.columns]  # numeric columns used for training
+
+# Scale features
+X_scaled_full = scaler.transform(X_numeric)
+
+# Make predictions
+y_pred_log_full = model.predict(X_scaled_full)
+y_pred_full = np.expm1(y_pred_log_full)
+
+df_predictions = df.copy()
+df_predictions['predicted_h'] = y_pred_full
+
+# Save file
+output_csv = 'master_data_predictions_only.csv'
+df_predictions.to_csv(output_csv, index=False)
+
+print(f"All predictions saved with original columns to '{output_csv}'.")
+
+import pandas as pd
+import numpy as np
+
+# Percent error calculations for both geometries
+
+def compute_percent_error(df, case_name):
+    """
+    Compute percent errors between predicted and measured h,
+    and correlation and measured h for each Reynolds number.
+    """
+    df = df.copy()
+    df['Error_predicted'] = 100 * np.abs((df['h_predicted'] - df['h_measured']) / df['h_measured'])
+    df['Error_correlation'] = 100 * np.abs((df['h_correlation'] - df['h_measured']) / df['h_measured'])
+    df['Case'] = case_name
+    return df[['Case', 'Re', 'Error_predicted', 'Error_correlation']]
+
+flat_plate_errors = compute_percent_error(flat_plate_results, 'Flat Plate')
+cylinder_errors = compute_percent_error(cylinder_results, 'Cylinder')
+
+# combine results
+comparison_table = pd.concat([flat_plate_errors, cylinder_errors], ignore_index=True)
+
+
+mean_errors = comparison_table.groupby('Case')[['Error_predicted', 'Error_correlation']].mean().reset_index()
+
+print("\nDetailed Percent Error per Reynolds Number:")
+print(comparison_table.to_string(index=False, justify='center', col_space=12))
+print("\nAverage Percent Error per Case:")
+print(mean_errors.to_string(index=False, justify='center', col_space=12))
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# plot heat transfer coefficient v reynolds
+
+filename = 'master_data_withRe.csv'
+data = pd.read_csv(filename)
+
+# remove Re = 0
+filtered = data[(data['Re'] != 0) & (data['heat_transfer_coef'] != 0)]
+print(f"Plotting {len(filtered)} valid data points (excluded zeros).")
+
+plt.figure(figsize=(7, 5))
+plt.scatter(filtered['Re'], filtered['heat_transfer_coef'],
+            color='royalblue', edgecolors='k', alpha=0.7)
+
+plt.xlabel('Reynolds Number (Re)', fontsize=12)
+plt.ylabel('Heat Transfer Coefficient (W/m²·K)', fontsize=12)
+plt.title('Heat Transfer Coefficient vs Reynolds Number', fontsize=14)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+
+# log scale additional plot
+
+filename = 'master_data_withRe.csv'
+data = pd.read_csv(filename)
+
+# remove Re = 0-
+filtered = data[(data['Re'] > 0) & (data['heat_transfer_coef'] > 0)]
+print(f"Plotting {len(filtered)} valid data points (excluded zeros and negatives).")
+
+plt.figure(figsize=(7, 5))
+plt.scatter(filtered['Re'], filtered['heat_transfer_coef'],
+            color='royalblue', edgecolors='k', alpha=0.7)
+
+plt.xscale('log')
+plt.yscale('log')
+plt.xlabel('Reynolds Number (Re)', fontsize=12)
+plt.ylabel('Heat Transfer Coefficient (W/m²·K)', fontsize=12)
+plt.title('Heat Transfer Coefficient vs Reynolds Number', fontsize=14)
+plt.grid(True, which='both', linestyle='--', linewidth=0.6)
+plt.tight_layout()
+plt.show()
+
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+save_dir = r"C:\Users\malinc2\Desktop\Final Machine Learning Project"
+os.makedirs(save_dir, exist_ok=True)  # create folder if it doesn't exist
+
+def save_figure(fig, filename):
+    save_path = os.path.join(save_dir, filename)
+    fig.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"✅ Figure saved to: {save_path}")
+
