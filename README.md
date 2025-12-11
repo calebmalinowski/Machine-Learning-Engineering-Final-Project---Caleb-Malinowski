@@ -1,7 +1,7 @@
 # Machine-Learning-Engineering-Final-Project---Caleb-Malinowski
-Code submission for final project in Machine Learning Engineering.
 
 Using Machine Learning to Predict Local Heat Transfer Coefficients
+
 Caleb Malinowski
 
 This project develops and evaluates a Random Forest model to predict the local heat transfer coefficient using a dataset compiled from CFD simulations.
